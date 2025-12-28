@@ -56,7 +56,7 @@ l_yaw,  = ax3.plot([], [], ':', label='Yaw (gyro)')
 
 ax3.set_ylabel("Angle (deg)")
 ax3.set_xlabel("Samples")
-ax3.legend(loc="upper left")
+ax3.legend(loc="upper right")
 ax3.grid()
 
 # -------- Fixed limits --------

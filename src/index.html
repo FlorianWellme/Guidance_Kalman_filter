@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>IMU Control Panel</title>
+    <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            background: #0e0e0e;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        .layout {
+            display: grid;
+            grid-template-columns: 1fr 2fr 1fr;
+            height: 100vh;
+        }
+        .panel {
+            padding: 10px;
+            border-right: 1px solid #222;
+        }
+        .center {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .chart {
+            width: 95%;
+            height: 26vh;
+        }
+        .controls button, select {
+            margin: 4px;
+        }
+        .angles-values {
+            font-size: 1.3em;
+            margin: 6px;
+        }
+        canvas {
+            background: #111;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="layout">
+
+    <!-- LEFT -->
+    <div class="panel">
+        <h3>Actuators</h3>
+        <canvas id="motors" width="250" height="150"></canvas>
+        <canvas id="servos" width="250" height="250"></canvas>
+    </div>
+
+    <!-- CENTER -->
+    <div class="panel center">
+
+        <div class="controls">
+            <select id="ports"></select>
+            <button onclick="start()">Start</button>
+            <button onclick="stop()">Stop</button>
+            <button onclick="clearData()">Clear</button>
+        </div>
+
+        <div class="angles-values">
+            Roll: <span id="roll">0.0</span>° |
+            Pitch: <span id="pitch">0.0</span>° |
+            Yaw: <span id="yaw">0.0</span>°
+        </div>
+
+        <div id="acc" class="chart"></div>
+        <div id="gyro" class="chart"></div>
+        <div id="angles" class="chart"></div>
+    </div>
+
+    <!-- RIGHT -->
+    <div class="panel">
+        <h3>Navigation</h3>
+        (future map / trajectory)
+    </div>
+
+</div>
+
+<script>
+/* ---------------- WebSocket ---------------- */
+const ws = new WebSocket("ws://localhost:8000/ws/imu");
+
+/* ---------------- Plotly init ---------------- */
+function initPlot(divId, traces, yRange) {
+    Plotly.newPlot(
+        divId,
+        traces.map(t => ({
+            y: [],
+            mode: "lines",
+            name: t.name,
+            line: {
+                color: t.color,
+                dash: t.dash || "solid",
+                width: 2
+            }
+        })),
+        {
+            yaxis: { range: yRange, fixedrange: true },
+            margin: { t: 20, l: 40, r: 10, b: 30 },
+            paper_bgcolor: "#0e0e0e",
+            plot_bgcolor: "#0e0e0e",
+            font: { color: "white" }
+        },
+        { displayModeBar: false }
+    );
+}
+
+initPlot("acc", [
+    { name: "Ax", color: "red" },
+    { name: "Ay", color: "green" },
+    { name: "Az", color: "blue" }
+], [-15000, 15000]);
+
+initPlot("gyro", [
+    { name: "Gx", color: "orange" },
+    { name: "Gy", color: "cyan" },
+    { name: "Gz", color: "magenta" }
+], [-800, 800]);
+
+initPlot("angles", [
+    { name: "Roll Acc",  color: "#888", dash: "dash" },
+    { name: "Roll Kal",  color: "white" },
+    { name: "Pitch Acc", color: "#888", dash: "dash" },
+    { name: "Pitch Kal", color: "lime" },
+    { name: "Yaw",       color: "red"}
+], [-110, 110]);
+
+/* ---------------- State ---------------- */
+let roll = 0, pitch = 0, yaw = 0;
+
+/* ---------------- WebSocket update ---------------- */
+ws.onmessage = (e) => {
+    const d = JSON.parse(e.data);
+
+    Plotly.update("acc", { y: d.acc });
+    Plotly.update("gyro", { y: d.gyro });
+    Plotly.update("angles", { y: d.angles });
+
+    roll  = d.angles[1].at(-1) || 0;
+    pitch = d.angles[3].at(-1) || 0;
+    yaw   = d.angles[4].at(-1) || 0;
+
+    document.getElementById("roll").textContent  = roll.toFixed(1);
+    document.getElementById("pitch").textContent = pitch.toFixed(1);
+    document.getElementById("yaw").textContent   = yaw.toFixed(1);
+};
+
+/* ---------------- Motors ---------------- */
+const motorCanvas = document.getElementById("motors");
+const mctx = motorCanvas.getContext("2d");
+let motorAngle = 0;
+
+function drawMotors() {
+    mctx.clearRect(0, 0, 250, 150);
+    const throttle = Math.min(1, (Math.abs(roll) + Math.abs(pitch)) / 60);
+    motorAngle += throttle * 0.4;
+
+    [60, 180].forEach(x => {
+        mctx.save();
+        mctx.translate(x, 75);
+        mctx.rotate(motorAngle);
+        mctx.strokeStyle = "white";
+        mctx.beginPath();
+        mctx.moveTo(-20, 0);
+        mctx.lineTo(20, 0);
+        mctx.stroke();
+        mctx.restore();
+    });
+    requestAnimationFrame(drawMotors);
+}
+drawMotors();
+
+/* ---------------- Servos ---------------- */
+const servoCanvas = document.getElementById("servos");
+const sctx = servoCanvas.getContext("2d");
+
+function drawServo(x, y, angle, label) {
+    sctx.save();
+    sctx.translate(x, y);
+    sctx.rotate(angle * Math.PI / 180);
+    sctx.fillStyle = "white";
+    sctx.fillRect(0, -4, 70, 8);
+    sctx.restore();
+    sctx.fillText(label, x - 40, y + 5);
+}
+
+function drawServos() {
+    sctx.clearRect(0, 0, 250, 250);
+    drawServo(60, 60, roll, "Roll");
+    drawServo(60, 130, pitch, "Pitch");
+    drawServo(60, 200, yaw, "Yaw");
+    requestAnimationFrame(drawServos);
+}
+drawServos();
+
+/* ---------------- Controls ---------------- */
+fetch("/ports")
+    .then(r => r.json())
+    .then(list => {
+        const sel = document.getElementById("ports");
+        list.forEach(p => {
+            const o = document.createElement("option");
+            o.value = p;
+            o.textContent = p;
+            sel.appendChild(o);
+        });
+    });
+
+function start() {
+    fetch("/start", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ port: ports.value })
+    });
+}
+function stop() { fetch("/stop", { method: "POST" }); }
+function clearData() { fetch("/clear", { method: "POST" }); }
+</script>
+
+</body>
+</html>
