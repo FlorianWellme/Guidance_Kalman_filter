@@ -62,6 +62,32 @@
             margin-top: 10px;
             display: block;
         }
+        .canvas-box {
+            position: relative;
+            display: inline-block;
+        }
+
+        .canvas-label {
+            position: absolute;
+            font-size: 12px;
+            font-family: Arial, sans-serif;
+            color: white;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        .canvas-label.bottom {
+            bottom: 6px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .canvas-label.right {
+            top: 50%;
+            right: -90px;
+            transform: translateY(-50%);
+        }
+
         .drone-gauges {
             display: flex;
             justify-content: space-between;
@@ -84,14 +110,31 @@
     <!-- LEFT -->
     <div class="panel">
         <h3>Actuators</h3>
-        <canvas id="motors" width="280" height="150"></canvas>
-
+        <div class="canvas-box">
+            <canvas id="motors" width="280" height="150"></canvas>
+            <div id="motorSpeed" class="canvas-label bottom">Speed 0.0 m/s</div>
+        </div>
 
         <div class="drone-gauges">
-            <canvas id="pitchGauge" width="260" height="260"></canvas>
-            <canvas id="yawGauge" width="260" height="260"></canvas>
+            <div class="canvas-box">
+                <canvas id="pitchGauge" width="260" height="260"></canvas>
+                <div id="pitchText" class="canvas-label bottom">Pitch 0.0°</div>
+            </div>
+
+            <div class="canvas-box">
+                <canvas id="yawGauge" width="260" height="260"></canvas>
+                <div id="yawText" class="canvas-label bottom">Yaw 0.0°</div>
+            </div>
         </div>
-        <canvas id="servos" width="280" height="280"></canvas>
+
+        <div class="canvas-box">
+            <canvas id="servos" width="320" height="280"></canvas>
+
+            <div id="servo1Text" class="canvas-label" style="top:105px; left:130px;">Servo 1: 0°</div>
+            <div id="servo2Text" class="canvas-label" style="top:200px; left:60px;">Servo 2: 0°</div>
+            <div id="servo3Text" class="canvas-label" style="top:200px; left:190px;">Servo 3: 0°</div>
+        </div>
+
 
     </div>
 
@@ -204,10 +247,12 @@ ws.onmessage = (e) => {
 const motorCanvas = document.getElementById("motors");
 const mctx = motorCanvas.getContext("2d");
 let motorAngle = 0;
-const motorSpeed = 0.05; // vitesse fixe
+const motorSpeed = 0.1; // vitesse fixe
+
+const motorSpeedLabel = document.getElementById("motorSpeed");
 
 function drawMotors() {
-    mctx.clearRect(0,0,250,150);
+    mctx.clearRect(0, 0, 250, 150);
 
     const cx = 125, cy = 70;
 
@@ -227,96 +272,93 @@ function drawMotors() {
     mctx.stroke();
     mctx.restore();
 
-    mctx.fillStyle = "white";
-    mctx.fillText("Speed 1.4 m/s", 80, 140);
+    motorSpeedLabel.textContent = "Speed 1.4 m/s";
 
     requestAnimationFrame(drawMotors);
 }
+
 drawMotors();
 
+/* ---------------- Servos ---------------- */
 /* ---------------- Servos ---------------- */
 const servoCanvas = document.getElementById("servos");
 const sctx = servoCanvas.getContext("2d");
 
-function drawServo(x, y, angleDeg, label) {
+const servo1Text = document.getElementById("servo1Text");
+const servo2Text = document.getElementById("servo2Text");
+const servo3Text = document.getElementById("servo3Text");
+
+function drawServo(x, y, angleDeg) {
     const L = 70;
 
     sctx.save();
     sctx.translate(x, y);
     sctx.rotate(angleDeg * Math.PI / 180);
     sctx.fillStyle = "white";
-    sctx.fillRect(-L/2, -4, L, 8);
+    sctx.fillRect(-L / 2, -4, L, 8);
     sctx.restore();
-
-    // Texte décalé à droite
-    sctx.fillStyle = "white";
-    sctx.fillText(label, x + 45, y + 5);
 }
 
-
 function drawServos() {
-    sctx.clearRect(0, 0, 250, 250);
+    sctx.clearRect(0, 0, servoCanvas.width, servoCanvas.height);
 
-    // Calcul des angles selon ta logique
     const servo1 = roll - yaw;
     const servo2 = roll + pitch + yaw;
     const servo3 = roll + pitch + yaw;
 
-    // Positions triangle
-    drawServo(125, 60,  servo1, "Servo 1");
-    drawServo(60,  140, servo2, "Servo 2");
-    drawServo(190, 140, servo3, "Servo 3");
+    drawServo(160, 60,  servo1);
+    drawServo(90,  160, servo2);
+    drawServo(230, 160, servo3);
+
+    servo1Text.textContent = `Servo 1: ${servo1.toFixed(1)}°`;
+    servo2Text.textContent = `Servo 2: ${servo2.toFixed(1)}°`;
+    servo3Text.textContent = `Servo 3: ${servo3.toFixed(1)}°`;
 
     requestAnimationFrame(drawServos);
 }
 
 drawServos();
 
-/* ---------------- Drone ---------------- */
 
+/* ---------------- Drone ---------------- */
+/* ---------------- Pitch ---------------- */
 const pitchCanvas = document.getElementById("pitchGauge");
 const pctx = pitchCanvas.getContext("2d");
+const pitchText = document.getElementById("pitchText");
 
 function drawPitchGauge() {
     pctx.clearRect(0, 0, pitchCanvas.width, pitchCanvas.height);
 
     pctx.save();
-    pctx.translate(110,110);
+    pctx.translate(110, 110);
 
-    // Limite l’angle visuel (ex: ±45°)
     const a = Math.max(-45, Math.min(45, pitch));
     pctx.rotate(-a * Math.PI / 180);
 
-    pctx.drawImage(pitchImg,  -90, -90, 180, 180);
+    pctx.drawImage(pitchImg, -90, -90, 180, 180);
     pctx.restore();
 
-    pctx.fillStyle = "white";
-    pctx.fillText(
-        pitch >= 0 ? "Ascending" : "Descending",
-        85, 140
-    );
+    pitchText.textContent = `Pitch ${pitch.toFixed(1)}°`;
 
     requestAnimationFrame(drawPitchGauge);
 }
 drawPitchGauge();
 
+/* ---------------- Yaw ---------------- */
 const yawCanvas = document.getElementById("yawGauge");
 const yctx = yawCanvas.getContext("2d");
+const yawText = document.getElementById("yawText");
 
 function drawYawGauge() {
     yctx.clearRect(0, 0, yawCanvas.width, yawCanvas.height);
 
     yctx.save();
     yctx.translate(110, 110);
-    yctx.rotate((-Math.PI/2) - yaw * Math.PI / 180);
+    yctx.rotate((-Math.PI / 2) - yaw * Math.PI / 180);
     yctx.drawImage(yawImg, -90, -90, 180, 180);
     yctx.restore();
 
-    yctx.fillStyle = "white";
-    yctx.fillText(
-        yaw >= 0 ? "Turning Left" : "Turning Right",
-        75, 140
-    );
+    yawText.textContent = `Yaw ${yaw.toFixed(1)}°`;
 
     requestAnimationFrame(drawYawGauge);
 }
