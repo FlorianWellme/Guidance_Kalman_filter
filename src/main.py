@@ -7,6 +7,8 @@ from collections import deque
 from fastapi import FastAPI, WebSocket
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 
 # ---------------- CONFIG ----------------
 BAUD_RATE = 115200
@@ -48,6 +50,13 @@ threading.Thread(target=serial_loop, daemon=True).start()
 
 # ---------------- FASTAPI ----------------
 app = FastAPI()
+
+BASE_DIR = Path(__file__).resolve().parent  # = Guidance/src
+IMAGES_DIR = BASE_DIR.parent / "images"    # = Guidance/images
+
+print("Static images dir:", IMAGES_DIR)
+
+app.mount("/static", StaticFiles(directory=IMAGES_DIR), name="static")
 
 @app.get("/")
 def index():

@@ -4,6 +4,7 @@
     <title>IMU Control Panel</title>
     <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
 
+    
     <style>
         body {
             margin: 0;
@@ -13,7 +14,7 @@
         }
         .layout {
             display: grid;
-            grid-template-columns: 1fr 2fr 1fr;
+            grid-template-columns: 1.2fr 2fr 1fr;
             height: 100vh;
         }
         .panel {
@@ -26,12 +27,32 @@
             align-items: center;
         }
         .chart {
-            width: 95%;
+            width: 80%;
             height: 26vh;
         }
-        .controls button, select {
-            margin: 4px;
+        .controls {
+            width: 100%;
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
         }
+        .controls select {
+            min-width: 180px;
+            max-width: 260px;
+            height: 28px;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .controls button {
+            padding: 4px 10px;
+            height: 28px;
+            font-size: 13px;
+        }
+
+
         .angles-values {
             font-size: 1.3em;
             margin: 6px;
@@ -39,7 +60,18 @@
         canvas {
             background: #111;
             margin-top: 10px;
+            display: block;
         }
+        .drone-gauges {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .drone-gauges canvas {
+            background: #111;
+        }
+
     </style>
 </head>
 
@@ -47,11 +79,20 @@
 
 <div class="layout">
 
+    
+
     <!-- LEFT -->
     <div class="panel">
         <h3>Actuators</h3>
-        <canvas id="motors" width="250" height="150"></canvas>
-        <canvas id="servos" width="250" height="250"></canvas>
+        <canvas id="motors" width="280" height="150"></canvas>
+
+
+        <div class="drone-gauges">
+            <canvas id="pitchGauge" width="260" height="260"></canvas>
+            <canvas id="yawGauge" width="260" height="260"></canvas>
+        </div>
+        <canvas id="servos" width="280" height="280"></canvas>
+
     </div>
 
     <!-- CENTER -->
@@ -86,6 +127,13 @@
 <script>
 /* ---------------- WebSocket ---------------- */
 const ws = new WebSocket("ws://localhost:8000/ws/imu");
+
+const pitchImg = new Image();
+pitchImg.src = "/static/A6K.png";
+
+const yawImg = new Image();
+yawImg.src = "/static/A6K.png";
+
 
 /* ---------------- Plotly init ---------------- */
 function initPlot(divId, traces, yRange) {
@@ -156,23 +204,32 @@ ws.onmessage = (e) => {
 const motorCanvas = document.getElementById("motors");
 const mctx = motorCanvas.getContext("2d");
 let motorAngle = 0;
+const motorSpeed = 0.05; // vitesse fixe
 
 function drawMotors() {
-    mctx.clearRect(0, 0, 250, 150);
-    const throttle = Math.min(1, (Math.abs(roll) + Math.abs(pitch)) / 60);
-    motorAngle += throttle * 0.4;
+    mctx.clearRect(0,0,250,150);
 
-    [60, 180].forEach(x => {
-        mctx.save();
-        mctx.translate(x, 75);
-        mctx.rotate(motorAngle);
-        mctx.strokeStyle = "white";
-        mctx.beginPath();
-        mctx.moveTo(-20, 0);
-        mctx.lineTo(20, 0);
-        mctx.stroke();
-        mctx.restore();
-    });
+    const cx = 125, cy = 70;
+
+    mctx.strokeStyle = "white";
+    mctx.beginPath();
+    mctx.arc(cx, cy, 45, 0, Math.PI * 2);
+    mctx.stroke();
+
+    motorAngle += motorSpeed;
+
+    mctx.save();
+    mctx.translate(cx, cy);
+    mctx.rotate(motorAngle);
+    mctx.beginPath();
+    mctx.moveTo(-30, 0);
+    mctx.lineTo(30, 0);
+    mctx.stroke();
+    mctx.restore();
+
+    mctx.fillStyle = "white";
+    mctx.fillText("Speed 1.4 m/s", 80, 140);
+
     requestAnimationFrame(drawMotors);
 }
 drawMotors();
@@ -181,24 +238,90 @@ drawMotors();
 const servoCanvas = document.getElementById("servos");
 const sctx = servoCanvas.getContext("2d");
 
-function drawServo(x, y, angle, label) {
+function drawServo(x, y, angleDeg, label) {
+    const L = 70;
+
     sctx.save();
     sctx.translate(x, y);
-    sctx.rotate(angle * Math.PI / 180);
+    sctx.rotate(angleDeg * Math.PI / 180);
     sctx.fillStyle = "white";
-    sctx.fillRect(0, -4, 70, 8);
+    sctx.fillRect(-L/2, -4, L, 8);
     sctx.restore();
-    sctx.fillText(label, x - 40, y + 5);
+
+    // Texte décalé à droite
+    sctx.fillStyle = "white";
+    sctx.fillText(label, x + 45, y + 5);
 }
+
 
 function drawServos() {
     sctx.clearRect(0, 0, 250, 250);
-    drawServo(60, 60, roll, "Roll");
-    drawServo(60, 130, pitch, "Pitch");
-    drawServo(60, 200, yaw, "Yaw");
+
+    // Calcul des angles selon ta logique
+    const servo1 = roll - yaw;
+    const servo2 = roll + pitch + yaw;
+    const servo3 = roll + pitch + yaw;
+
+    // Positions triangle
+    drawServo(125, 60,  servo1, "Servo 1");
+    drawServo(60,  140, servo2, "Servo 2");
+    drawServo(190, 140, servo3, "Servo 3");
+
     requestAnimationFrame(drawServos);
 }
+
 drawServos();
+
+/* ---------------- Drone ---------------- */
+
+const pitchCanvas = document.getElementById("pitchGauge");
+const pctx = pitchCanvas.getContext("2d");
+
+function drawPitchGauge() {
+    pctx.clearRect(0, 0, pitchCanvas.width, pitchCanvas.height);
+
+    pctx.save();
+    pctx.translate(110,110);
+
+    // Limite l’angle visuel (ex: ±45°)
+    const a = Math.max(-45, Math.min(45, pitch));
+    pctx.rotate(-a * Math.PI / 180);
+
+    pctx.drawImage(pitchImg,  -90, -90, 180, 180);
+    pctx.restore();
+
+    pctx.fillStyle = "white";
+    pctx.fillText(
+        pitch >= 0 ? "Ascending" : "Descending",
+        85, 140
+    );
+
+    requestAnimationFrame(drawPitchGauge);
+}
+drawPitchGauge();
+
+const yawCanvas = document.getElementById("yawGauge");
+const yctx = yawCanvas.getContext("2d");
+
+function drawYawGauge() {
+    yctx.clearRect(0, 0, yawCanvas.width, yawCanvas.height);
+
+    yctx.save();
+    yctx.translate(110, 110);
+    yctx.rotate((-Math.PI/2) - yaw * Math.PI / 180);
+    yctx.drawImage(yawImg, -90, -90, 180, 180);
+    yctx.restore();
+
+    yctx.fillStyle = "white";
+    yctx.fillText(
+        yaw >= 0 ? "Turning Left" : "Turning Right",
+        75, 140
+    );
+
+    requestAnimationFrame(drawYawGauge);
+}
+drawYawGauge();
+
 
 /* ---------------- Controls ---------------- */
 fetch("/ports")
@@ -222,6 +345,7 @@ function start() {
 }
 function stop() { fetch("/stop", { method: "POST" }); }
 function clearData() { fetch("/clear", { method: "POST" }); }
+
 </script>
 
 </body>
